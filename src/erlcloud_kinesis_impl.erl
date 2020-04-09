@@ -114,14 +114,21 @@ request_and_retry(Config, Headers, Body, ShouldDecode, {attempt, Attempt}) ->
            Body, erlcloud_aws:get_timeout(Config), Config) of
 
         {ok, {{200, _}, RespHeaders, RespBody}} ->
+            Decoded = decode(RespBody),
+            case proplists:get_value(<<"FailedRecordCount">>, Decoded, 0) of
+                0 -> ok;
+                _ -> 
+                    error_logger:error_msg("Kinesis response headers
+                                            partial success : ~p",
+                                            [RespHeaders]),
+            end,
             Result = case ShouldDecode of
-                         true  -> decode(RespBody);
+                         true  -> Decoded;
                          false -> RespBody
                      end,
             {ok, Result};
 
         {ok, {{Status, StatusLine}, RespHeaders, RespBody}} when Status >= 400 andalso Status < 500 ->
-            error_logger:error_msg("Kinesis response headers 400-499 : ~p", [RespHeaders]),
             case client_error(Status, StatusLine, RespBody) of
                 {retry, Reason} ->
                     request_and_retry(Config, Headers, Body, ShouldDecode, RetryFun(Attempt, Reason));
@@ -130,15 +137,12 @@ request_and_retry(Config, Headers, Body, ShouldDecode, {attempt, Attempt}) ->
             end;
 
         {ok, {{Status, StatusLine}, RespHeaders, RespBody}} when Status >= 500 ->
-            error_logger:error_msg("Kinesis response headers 500+ : ~p", [RespHeaders]),
             request_and_retry(Config, Headers, Body, ShouldDecode, RetryFun(Attempt, {http_error, Status, StatusLine, RespBody}));
 
         {ok, {{Status, StatusLine}, RespHeaders, RespBody}} ->
-            error_logger:error_msg("Kinesis response headers <400 : ~p", [RespHeaders]),
             {error, {http_error, Status, StatusLine, RespBody}};
 
         {error, Reason} ->
-            error_logger:error_msg("Kinesis response error other : ~p", [Reason]),
             %% TODO there may be some http errors, such as certificate error, that we don't want to retry
             request_and_retry(Config, Headers, Body, ShouldDecode, RetryFun(Attempt, Reason))
     end.
