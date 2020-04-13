@@ -120,7 +120,7 @@ request_and_retry(Config, Headers, Body, ShouldDecode, {attempt, Attempt}) ->
                 _ -> 
                     error_logger:error_msg("Kinesis response headers
                                             partial success : ~p",
-                                            [RespHeaders]),
+                                            [RespHeaders])
             end,
             Result = case ShouldDecode of
                          true  -> Decoded;
@@ -128,7 +128,7 @@ request_and_retry(Config, Headers, Body, ShouldDecode, {attempt, Attempt}) ->
                      end,
             {ok, Result};
 
-        {ok, {{Status, StatusLine}, RespHeaders, RespBody}} when Status >= 400 andalso Status < 500 ->
+        {ok, {{Status, StatusLine}, _, RespBody}} when Status >= 400 andalso Status < 500 ->
             case client_error(Status, StatusLine, RespBody) of
                 {retry, Reason} ->
                     request_and_retry(Config, Headers, Body, ShouldDecode, RetryFun(Attempt, Reason));
@@ -136,10 +136,10 @@ request_and_retry(Config, Headers, Body, ShouldDecode, {attempt, Attempt}) ->
                     {error, Reason}
             end;
 
-        {ok, {{Status, StatusLine}, RespHeaders, RespBody}} when Status >= 500 ->
+        {ok, {{Status, StatusLine}, _, RespBody}} when Status >= 500 ->
             request_and_retry(Config, Headers, Body, ShouldDecode, RetryFun(Attempt, {http_error, Status, StatusLine, RespBody}));
 
-        {ok, {{Status, StatusLine}, RespHeaders, RespBody}} ->
+        {ok, {{Status, StatusLine}, _, RespBody}} ->
             {error, {http_error, Status, StatusLine, RespBody}};
 
         {error, Reason} ->
